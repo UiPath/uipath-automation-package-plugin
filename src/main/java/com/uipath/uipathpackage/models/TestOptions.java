@@ -6,7 +6,10 @@ public class TestOptions extends AuthenticatedOptions {
     private String environment;
     private String testReportType;
     private String testReportDestination;
+    private String parametersFilePath;
+    private boolean attachRobotLogs;
     private Integer timeout;
+    private final String telemetryOrigin = "Jenkins";
 
     public String getEnvironment() {
         return environment;
@@ -54,5 +57,25 @@ public class TestOptions extends AuthenticatedOptions {
 
     public void setTestReportDestination(String testReportDestination) {
         this.testReportDestination = testReportDestination;
+    }
+
+    public String getParametersFilePath() {
+        return parametersFilePath;
+    }
+
+    public void setParametersFilePath(String parametersFilePath) {
+        this.parametersFilePath = parametersFilePath;
+    }
+
+	public boolean getAttachRobotLogs() {
+		return attachRobotLogs;
+	}
+
+	public void setAttachRobotLogs(boolean attachRobotLogs) {
+		this.attachRobotLogs = attachRobotLogs;
+	}
+
+    public String getTelemetryOrigin() {
+        return telemetryOrigin;
     }
 }

@@ -3,16 +3,13 @@ package com.uipath.uipathpackage;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.CredentialsStore;
-import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.Domain;
-import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import com.uipath.uipathpackage.entries.authentication.TokenAuthenticationEntry;
-import com.uipath.uipathpackage.entries.authentication.UserPassAuthenticationEntry;
 import com.uipath.uipathpackage.entries.versioning.AutoVersionEntry;
+import com.uipath.uipathpackage.util.TraceLevel;
 import hudson.FilePath;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
-import hudson.plugins.powershell.PowerShell;
 import hudson.slaves.DumbSlave;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
@@ -36,111 +33,155 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
 
+import static org.apache.commons.lang.StringUtils.EMPTY;
 import static org.junit.Assert.assertEquals;
 
 @RunWith(Parameterized.class)
 public class UiPathDeployTests {
-
-    private static String userPassCredentialsId;
-    private static String tokenCredentialsId;
     private static String orchestratorAddress = "null";
     private static String orchestratorTenant = null;
-    private static String username = null;
     private static String description;
+
+    private static String userPassCredentialsId;
+    private static String username = null;
     private static String password;
-    private static String token;
+
+    private static String tokenCredentialsId;
+    private static String accountName = null;
+    private static String refreshToken;
+
+    private static String externalAppCredentialsId;
+    private static String accountForApp;
+    private static String applicationId;
+    private static String applicationSecret;
+    private static String applicationScope;
+
     private static String environments;
     private static String folderName;
+    public static String entryPointPaths;
+    public String entryPoints;
     private static int folderId;
     private static String workspaceOutputPath;
+	private static TraceLevel traceLevel;
 
     private String packagePath;
     private String packageName;
 
-    private static UserPassAuthenticationEntry userPassCredentials;
+    private boolean createProcess = true;
+
+//    private static UserPassAuthenticationEntry userPassCredentials;
     private static TokenAuthenticationEntry tokenCredentials;
+    private static TokenAuthenticationEntry externalAppCredentials;
+
     @Rule
     public final JenkinsRule jenkins = new JenkinsRule();
     private FreeStyleProject project;
 
-    public UiPathDeployTests(String packagePath, String packageName) {
+    public UiPathDeployTests(String packagePath, String packageName, String entryPoints) {
         this.packagePath = packagePath;
         this.packageName = packageName;
+        this.entryPoints = entryPoints;
     }
 
     @Parameters(name = "{1}")
     public static Iterable<Object[]> data() throws Throwable
     {
         return Arrays.asList(new Object[][] {
-            { new File(Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("ProcessProject")).getPath()).getAbsolutePath(), "ProcessProjectJenkins" },
-            { new File(Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("TestProject")).getPath()).getAbsolutePath(), "TestProject" }
+            { new File(Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("ProcessProject")).getPath()).getAbsolutePath(), "ProcessProjectJenkins", "Main.xaml" },
+            { new File(Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("TestProject")).getPath()).getAbsolutePath(), "TestProject", "PassTestCase.xaml" }
         });
     }
 
     @BeforeClass
     public static void setupClass() {
-        orchestratorAddress = System.getenv("TestOrchestratorUrl");
-        orchestratorTenant = System.getenv("TestOrchestratorTenant");
+        orchestratorAddress = System.getenv("TestOrchestratorCloudUrl");
+        orchestratorTenant = System.getenv("TestOrchestratorCloudTenant");
+
+        userPassCredentialsId = "TestIdUserPass";
         username = System.getenv("TestOrchestratorUsername");
         password = System.getenv("TestOrchestratorPassword");
-        token = "testtoken";
-        description = "TestDesc";
-        userPassCredentialsId = "TestIdUserPass";
+
         tokenCredentialsId = "TestIdToken";
+        accountName = System.getenv("TestOrchestratorAccountName");
+        refreshToken = System.getenv("TestOrchestratorAuthenticationToken");
+        tokenCredentials = new TokenAuthenticationEntry(tokenCredentialsId, accountName);
+
+        externalAppCredentialsId = "TestIdExternalApp";
+        accountForApp = System.getenv("TestOrchestratorAccountName");
+        applicationId = System.getenv("TestOrchestratorApplicationId");
+        applicationSecret = System.getenv("TestOrchestratorApplicationSecret");
+        applicationScope = System.getenv("TestOrchestratorApplicationScope");
+        externalAppCredentials = new TokenAuthenticationEntry(externalAppCredentialsId, accountForApp);
+
+        description = "TestDesc";
         environments = System.getenv("TestOrchestratorEnvironments");
         folderName = System.getenv("TestOrchestratorFolderName");
         folderId = 21;
-        userPassCredentials = new UserPassAuthenticationEntry(userPassCredentialsId);
-        tokenCredentials = new TokenAuthenticationEntry(tokenCredentialsId, "randomaccount");
         workspaceOutputPath = "${WORKSPACE}";
+        traceLevel = TraceLevel.None;
+        entryPointPaths = "Main.xaml,Sequence.xaml";
     }
 
     @Before
     public void setUp() throws IOException {
-        try {
-            deletePackage();
-        }
-        catch (Exception e) {
-            System.out.println(e);
-        }
+//        try {
+//            deletePackage();
+//        }
+//        catch (Exception e) {
+//            System.out.println(e);
+//        }
         project = jenkins.createFreeStyleProject("freeStyleProject1");
         CredentialsStore store = CredentialsProvider.lookupStores(jenkins).iterator().next();
 
-        StandardUsernamePasswordCredentials usernamePasswordCredentials = new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, userPassCredentialsId, description, username, password);
-        store.addCredentials(Domain.global(), usernamePasswordCredentials);
+//        StandardUsernamePasswordCredentials usernamePasswordCredentials = new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, userPassCredentialsId, description, username, password);
+//        store.addCredentials(Domain.global(), usernamePasswordCredentials);
 
-        StringCredentials tokenCredentials = new StringCredentialsImpl(CredentialsScope.GLOBAL, tokenCredentialsId, description, Secret.fromString(token));
+        StringCredentials tokenCredentials = new StringCredentialsImpl(CredentialsScope.GLOBAL, tokenCredentialsId, description, Secret.fromString(refreshToken));
         store.addCredentials(Domain.global(), tokenCredentials);
+
+        StringCredentials externalAppCredentials = new StringCredentialsImpl(CredentialsScope.GLOBAL, externalAppCredentialsId, description, Secret.fromString(applicationSecret));
+        store.addCredentials(Domain.global(), externalAppCredentials);
     }
 
     @Test
-    public void testDeployWithUsernamePasswordConfigRoundtrip() throws Exception {
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+    public void testDeployWithTokenConfigRoundtrip() throws Exception {
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
         project = jenkins.configRoundtrip(project);
-        jenkins.assertEqualDataBoundBeans(new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials), project.getPublishersList().get(0));
+        jenkins.assertEqualDataBoundBeans(new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess), project.getPublishersList().get(0));
     }
 
     @Test
     public void testDeployWithTokenConfigRoundTrip() throws Exception {
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
         project = jenkins.configRoundtrip(project);
-        jenkins.assertEqualDataBoundBeans(new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials), project.getPublishersList().get(0));
+        jenkins.assertEqualDataBoundBeans(new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess), project.getPublishersList().get(0));
     }
 
     @Test
-    public void testExecuteDeployFolderWithUserPassReturnsExpectedOutput() throws Exception {
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+    public void testDeployWithExternalAppConfigRoundTrip() throws Exception {
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, externalAppCredentials, traceLevel, entryPoints, createProcess);
+        project.getPublishersList().add(publisher);
+        project = jenkins.configRoundtrip(project);
+        jenkins.assertEqualDataBoundBeans(new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, externalAppCredentials, traceLevel, entryPoints, createProcess), project.getPublishersList().get(0));
+    }
+
+    @Test
+    public void testExecuteDeployFolderWithTokenReturnsExpectedOutput() throws Exception {
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
+        project.getBuildersList().add(pack);
+
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
         jenkins.assertLogContains(String.format("Deploying project(s)", packagePath), build);
@@ -148,13 +189,13 @@ public class UiPathDeployTests {
     }
 
     @Test
-    public void testExecuteDeployFileWithUserPassReturnsExpectedOutput() throws Exception {
+    public void testExecuteDeployFileWithTokenReturnsExpectedOutput() throws Exception {
         String nuPkgPath = new FilePath((new File(packagePath)).listFiles()[0]).getRemote();
 
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
 
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
@@ -164,12 +205,12 @@ public class UiPathDeployTests {
 
     @Test
     public void testDeployOnSlave() throws Exception {
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
 
-        DumbSlave node = jenkins.createSlave("aNode", "", null);
+        DumbSlave node = jenkins.createSlave("aNode", EMPTY, null);
         project.setAssignedNode(node);
         project.getPublishersList().add(publisher);
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
@@ -177,32 +218,54 @@ public class UiPathDeployTests {
     }
 
     @Test
+    public void testDeployOnSlaveWithNoProcessCreation() throws Exception {
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
+        project.getBuildersList().add(pack);
+        boolean createProcessLocal = false;
+
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcessLocal);
+
+        DumbSlave node = jenkins.createSlave("aNode", EMPTY, null);
+        project.setAssignedNode(node);
+        project.getPublishersList().add(publisher);
+        FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
+        System.out.println(build.toString());
+        jenkins.assertLogContains("Deploying project(s)", build);
+        jenkins.assertLogNotContains("Process will be deployed in modern folder", build);
+        jenkins.assertLogNotContains("Deployed", build);
+    }
+
+    @Test
     public void testUiPathDeployClass() {
-        UiPathDeploy uiPathDeploy = new UiPathDeploy(packagePath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy uiPathDeploy = new UiPathDeploy(packagePath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, EMPTY, createProcess);
         assertEquals(packagePath, uiPathDeploy.getPackagePath());
         assertEquals(orchestratorAddress, uiPathDeploy.getOrchestratorAddress());
         assertEquals(orchestratorTenant, uiPathDeploy.getOrchestratorTenant());
-        assertEquals(userPassCredentials, uiPathDeploy.getCredentials());
+        assertEquals(tokenCredentials, uiPathDeploy.getCredentials());
         assertEquals(folderName, uiPathDeploy.getFolderName());
+        assertEquals(traceLevel, uiPathDeploy.getTraceLevel());
+        assertEquals("Main.xaml", uiPathDeploy.getEntryPointPaths());
+        assertEquals(createProcess, uiPathDeploy.getCreateProcess());
     }
 
     @Test
     public void testDescriptorParameterValidation() {
         UiPathDeploy.DescriptorImpl descriptor = new UiPathDeploy.DescriptorImpl();
-        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.UiPathDeploy_DescriptorImpl_Errors_MissingPackagePath())), String.valueOf(descriptor.doCheckPackagePath("")));
+        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.UiPathDeploy_DescriptorImpl_Errors_MissingPackagePath())), String.valueOf(descriptor.doCheckPackagePath(EMPTY)));
         assertEquals(String.valueOf(FormValidation.ok()), String.valueOf(descriptor.doCheckPackagePath(packagePath)));
-        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.GenericErrors_MissingOrchestratorAddress())), String.valueOf(descriptor.doCheckOrchestratorAddress("")));
+        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.GenericErrors_MissingOrchestratorAddress())), String.valueOf(descriptor.doCheckOrchestratorAddress(EMPTY)));
         assertEquals(String.valueOf(FormValidation.ok()), String.valueOf(descriptor.doCheckOrchestratorAddress(orchestratorAddress)));
-        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.GenericErrors_MissingFolder())), String.valueOf(descriptor.doCheckFolderName("")));
+        assertEquals(String.valueOf(FormValidation.error(com.uipath.uipathpackage.Messages.GenericErrors_MissingFolder())), String.valueOf(descriptor.doCheckFolderName(EMPTY)));
         assertEquals(String.valueOf(FormValidation.ok()), String.valueOf(descriptor.doCheckFolderName(folderName)));
+        assertEquals(String.valueOf(FormValidation.ok()), String.valueOf(descriptor.doCheckEntryPointPaths(entryPointPaths)));
     }
 
     @Test
     public void testPublish() throws Exception {
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(workspaceOutputPath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
         jenkins.assertLogContains("Deployed", build);
@@ -215,10 +278,10 @@ public class UiPathDeployTests {
         String[] fileNameParts = packagePath.split("\\\\");
         String fileName = fileNameParts[fileNameParts.length-1];
 
-        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath);
+        UiPathPack pack = new UiPathPack(new AutoVersionEntry(), packagePath, workspaceOutputPath, traceLevel);
         project.getBuildersList().add(pack);
 
-        UiPathDeploy publisher = new UiPathDeploy(".", orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(".", orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, entryPoints, createProcess);
         project.getPublishersList().add(publisher);
 
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
@@ -233,10 +296,10 @@ public class UiPathDeployTests {
 
         File projectJson = new File(Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("TestProject/project.json")).getPath());
         String projectJsonPath = projectJson.getAbsolutePath();
-        UiPathPack builder = new UiPathPack(new AutoVersionEntry(), projectJsonPath, nugetPackagePath);
+        UiPathPack builder = new UiPathPack(new AutoVersionEntry(), projectJsonPath, nugetPackagePath, traceLevel);
 
         project.getBuildersList().add(builder);
-        UiPathDeploy publisher = new UiPathDeploy(nugetPackagePath, orchestratorAddress, orchestratorTenant, folderName, environments, userPassCredentials);
+        UiPathDeploy publisher = new UiPathDeploy(nugetPackagePath, orchestratorAddress, orchestratorTenant, folderName, environments, tokenCredentials, traceLevel, "PassTestCase.xaml", createProcess);
         project.getPublishersList().add(publisher);
         FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
         jenkins.assertLogContains("Deployed", build);

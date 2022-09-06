@@ -2,13 +2,16 @@ package com.uipath.uipathpackage;
 
 import com.google.common.collect.ImmutableList;
 import com.uipath.uipathpackage.entries.SelectEntry;
+import com.uipath.uipathpackage.entries.authentication.ExternalAppAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.TokenAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.UserPassAuthenticationEntry;
 import com.uipath.uipathpackage.entries.versioning.AutoVersionEntry;
 import com.uipath.uipathpackage.entries.versioning.CurrentVersionEntry;
 import com.uipath.uipathpackage.entries.versioning.ManualVersionEntry;
+import com.uipath.uipathpackage.models.AnalyzeOptions;
 import com.uipath.uipathpackage.models.PackOptions;
 import com.uipath.uipathpackage.util.OutputType;
+import com.uipath.uipathpackage.util.TraceLevel;
 import com.uipath.uipathpackage.util.Utility;
 import hudson.*;
 import hudson.model.*;
@@ -28,10 +31,7 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.InvalidParameterException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import static hudson.slaves.WorkspaceList.tempDir;
 
@@ -44,11 +44,13 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
     private final String projectJsonPath;
     private final String outputPath;
     private String outputType;
+    private boolean runWorkflowAnalysis;
 
     private boolean useOrchestrator;
     private String orchestratorAddress;
     private String orchestratorTenant;
     private SelectEntry credentials;
+    private final TraceLevel traceLevel;
 
     /**
      * Data bound constructor responsible for setting the values param values to state
@@ -56,17 +58,20 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
      * @param version         Entry version
      * @param projectJsonPath Project Json Path
      * @param outputPath      Output Path
+     * @param traceLevel      The trace logging level. One of the following values: None, Critical, Error, Warning, Information, Verbose. (default None)
      */
     @DataBoundConstructor
-    public UiPathPack(SelectEntry version, String projectJsonPath, String outputPath) {
+    public UiPathPack(SelectEntry version, String projectJsonPath, String outputPath, TraceLevel traceLevel) {
         this.version = version;
         this.projectJsonPath = projectJsonPath;
         this.outputPath = outputPath;
+        this.traceLevel = traceLevel;
         this.outputType = "None";
 
         this.orchestratorAddress = "";
         this.orchestratorTenant = "";
         this.credentials = null;
+        this.runWorkflowAnalysis = false;
     }
 
     /**
@@ -83,12 +88,12 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
     public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath workspace, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         validateParameters();
 
-        FilePath tempRemoteDir = tempDir(workspace);
-        tempRemoteDir.mkdirs();
-
         if (launcher.isUnix()) {
             throw new AbortException(com.uipath.uipathpackage.Messages.GenericErrors_MustUseWindows());
         }
+
+        FilePath tempRemoteDir = tempDir(workspace);
+        tempRemoteDir.mkdirs();
 
         try {
             EnvVars envVars = run.getEnvironment(listener);
@@ -101,6 +106,20 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
             FilePath expandedProjectJsonPath = projectJsonPath.contains("${WORKSPACE}") ?
                     new FilePath(launcher.getChannel(), envVars.expand(projectJsonPath)) :
                     workspace.child(envVars.expand(projectJsonPath));
+
+            if (runWorkflowAnalysis) {
+                AnalyzeOptions analyzeOptions = new AnalyzeOptions();
+                analyzeOptions.setProjectPath(expandedProjectJsonPath.getRemote());
+
+                if (useOrchestrator) {
+                    analyzeOptions.setOrchestratorUrl(orchestratorAddress);
+                    analyzeOptions.setOrchestratorTenant(orchestratorTenant);
+
+                    util.setCredentialsFromCredentialsEntry(credentials, analyzeOptions, run);
+                }
+
+                util.execute("AnalyzeOptions", analyzeOptions, tempRemoteDir, listener, envVars, launcher, true);
+            }
 
             PackOptions packOptions = new PackOptions();
 
@@ -121,15 +140,22 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
                 util.setCredentialsFromCredentialsEntry(credentials, packOptions, run);
             }
 
+            String language = Locale.getDefault().getLanguage();
+            String country = Locale.getDefault().getCountry();
+            String localization = country.isEmpty() ? language : language + "-" + country;
+            packOptions.setLanguage(localization);
+
+            packOptions.setTraceLevel(traceLevel);
+
             util.execute("PackOptions", packOptions, tempRemoteDir, listener, envVars, launcher, true);
         } catch (URISyntaxException e) {
             e.printStackTrace(listener.getLogger());
             throw new AbortException(e.getMessage());
         } finally {
-            try{
+            try {
                 Objects.requireNonNull(tempRemoteDir).deleteRecursive();
-            }catch(Exception e){
-                listener.getLogger().println("Failed to delete temp remote directory in UiPath Pack "+ e.getMessage());
+            } catch(Exception e) {
+                listener.getLogger().println(com.uipath.uipathpackage.Messages.GenericErrors_FailedToDeleteTempPack() + e.getMessage());
                 e.printStackTrace(listener.getLogger());
             }
         }
@@ -149,6 +175,11 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
     @DataBoundSetter
     public void setOutputType(String outputType) {
         this.outputType = outputType;
+    }
+
+    @DataBoundSetter
+    public void setRunWorkflowAnalysis(boolean runWorkflowAnalysis) {
+        this.runWorkflowAnalysis = runWorkflowAnalysis;
     }
 
     @DataBoundSetter
@@ -238,28 +269,44 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
         return outputType;
     }
 
+    /**
+     * Provides the run workflow analysis flag
+     *
+     * @return boolean runWorkflowAnalysis
+     */
+    public boolean getRunWorkflowAnalysis() {
+        return runWorkflowAnalysis;
+    }
+
+    /**
+     * traceLevel
+     *
+     * @return TraceLevel traceLevel
+     */
+    public TraceLevel getTraceLevel() {
+        return traceLevel;
+    }
+
     private void validateParameters() throws AbortException {
-        if (version == null)
-        {
+        if (version == null) {
             throw new InvalidParameterException(com.uipath.uipathpackage.Messages.GenericErrors_MissingVersioningMethod());
         }
 
-        util.validateParams(projectJsonPath, "Invalid Project(s) Path");
-
-        util.validateParams(outputPath, "Invalid Output Path");
+        util.validateParams(projectJsonPath, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidProject());
+        util.validateParams(outputPath, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOutputPath());
 
         if (useOrchestrator) {
-            util.validateParams(orchestratorAddress, "Invalid Orchestrator Address");
+            util.validateParams(orchestratorAddress, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOrchAddress());
 
             if (credentials == null) {
-                throw new InvalidParameterException("You must specify either a set of credentials or an authentication token");
+                throw new InvalidParameterException(com.uipath.uipathpackage.Messages.ValidationErrors_InvalidCredentialsType());
             }
 
             credentials.validateParameters();
         }
 
         if (outputPath.toUpperCase().contains("${JENKINS_HOME}")) {
-            throw new AbortException("Paths containing JENKINS_HOME are not allowed, use the Archive Artifacts plugin to copy the required files to the build output.");
+            throw new AbortException(com.uipath.uipathpackage.Messages.ValidationErrors_InvalidPath());
         }
     }
 
@@ -287,7 +334,11 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
          * @return list of the Entry descriptors
          */
         public List<Descriptor> getEntryDescriptors() {
-            Jenkins jenkins = Jenkins.getInstance();
+            Jenkins jenkins = Jenkins.getInstanceOrNull();
+            if (jenkins == null) {
+                return new ArrayList<>();
+            }
+
             List<Descriptor> list = new ArrayList<>();
             Descriptor autoDescriptor = jenkins.getDescriptor(AutoVersionEntry.class);
             if (autoDescriptor != null) {
@@ -359,9 +410,28 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
             }
 
             ListBoxModel result= new ListBoxModel();
-            for (Map.Entry<String, String> v: OutputType.outputTypes.entrySet())
-            {
+            for (Map.Entry<String, String> v: OutputType.outputTypes.entrySet()) {
                 result.add(v.getKey(), v.getValue());
+            }
+
+            return result;
+        }
+
+        /**
+         * Returns the list of Strings to be filled in choice
+         * If item is null or doesn't have configure permission it will return empty list
+         *
+         * @param item Basic configuration unit in Hudson
+         * @return ListBoxModel list of String
+         */
+        public ListBoxModel doFillTraceLevelItems(@AncestorInPath Item item) {
+            if (item == null || !item.hasPermission(Item.CONFIGURE)) {
+                return new ListBoxModel();
+            }
+
+            ListBoxModel result= new ListBoxModel();
+            for (TraceLevel v: TraceLevel.values()) {
+                result.add(v.toString(), v.toString());
             }
 
             return result;
@@ -373,7 +443,11 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
          * @return list of the authentication descriptors
          */
         public List<Descriptor> getAuthenticationDescriptors() {
-            Jenkins jenkins = Jenkins.getInstance();
+            Jenkins jenkins = Jenkins.getInstanceOrNull();
+            if (jenkins == null) {
+                return new ArrayList<>();
+            }
+
             List<Descriptor> list = new ArrayList<>();
             Descriptor userPassDescriptor = jenkins.getDescriptor(UserPassAuthenticationEntry.class);
             if (userPassDescriptor != null) {
@@ -382,6 +456,10 @@ public class UiPathPack extends Builder implements SimpleBuildStep {
             Descriptor tokenDescriptor = jenkins.getDescriptor(TokenAuthenticationEntry.class);
             if (tokenDescriptor != null) {
                 list.add(tokenDescriptor);
+            }
+            Descriptor externalAppDescriptor = jenkins.getDescriptor(ExternalAppAuthenticationEntry.class);
+            if (externalAppDescriptor != null) {
+                list.add(externalAppDescriptor);
             }
             return ImmutableList.copyOf(list);
         }

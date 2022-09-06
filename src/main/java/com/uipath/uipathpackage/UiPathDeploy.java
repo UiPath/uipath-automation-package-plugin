@@ -2,22 +2,25 @@ package com.uipath.uipathpackage;
 
 import com.google.common.collect.ImmutableList;
 import com.uipath.uipathpackage.entries.SelectEntry;
+import com.uipath.uipathpackage.entries.authentication.ExternalAppAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.TokenAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.UserPassAuthenticationEntry;
 import com.uipath.uipathpackage.models.DeployOptions;
+import com.uipath.uipathpackage.util.TraceLevel;
 import com.uipath.uipathpackage.util.Utility;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.*;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.Symbol;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import javax.annotation.Nonnull;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
@@ -38,6 +41,9 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
     private final SelectEntry credentials;
     private final String environments;
     private final String folderName;
+    private TraceLevel traceLevel;
+    private final String entryPointPaths;
+    private final boolean createProcess;
 
     /**
      * Data bound constructor which is responsible for setting/saving of the values
@@ -49,16 +55,29 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
      * @param folderName          Orchestrator folder
      * @param credentials         Orchestrator credentials
      * @param environments        Environments on which to deploy
+     * @param traceLevel          The trace logging level. One of the following values: None, Critical, Error, Warning, Information, Verbose. (default None)
+     * @param entryPointPaths     Entry points with which processes will be created
+     * @param createProcess       Create process flag (default true)
      */
     @DataBoundConstructor
-    public UiPathDeploy(String packagePath, String orchestratorAddress, String orchestratorTenant,
-            String folderName, String environments, SelectEntry credentials) {
+    public UiPathDeploy(String packagePath,
+                        String orchestratorAddress,
+                        String orchestratorTenant,
+                        String folderName,
+                        String environments,
+                        SelectEntry credentials,
+                        TraceLevel traceLevel,
+                        String entryPointPaths,
+                        boolean createProcess) {
         this.packagePath = packagePath;
         this.orchestratorAddress = orchestratorAddress;
         this.orchestratorTenant = orchestratorTenant;
         this.credentials = credentials;
         this.folderName = folderName;
         this.environments = environments;
+        this.traceLevel = traceLevel;
+        this.entryPointPaths = entryPointPaths;
+        this.createProcess = createProcess;
     }
 
     /**
@@ -116,6 +135,32 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
     }
 
     /**
+     * traceLevel
+     *
+     * @return TraceLevel traceLevel
+     */
+    public TraceLevel getTraceLevel() {
+        return traceLevel;
+    }
+
+    /**
+     * The comma-separated list of entry points with which processes will be created
+     *
+     * @return the entry points
+     */
+    public String getEntryPointPaths() {
+        return entryPointPaths == null || entryPointPaths.trim().isEmpty() ? "Main.xaml" : entryPointPaths;
+    }
+
+    /**
+     * Whether the process should be created automatically or not (default true)
+     * @return createProcess flag
+     */
+    public boolean getCreateProcess() {
+        return createProcess;
+    }
+
+    /**
      * Declares the scope of the synchronization monitor this {@link BuildStep} expects from outside.
      * {@link BuildStepMonitor#NONE}
      * No external synchronization is performed on this build step. This is the most efficient, and thus
@@ -164,49 +209,64 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
             deployOptions.setOrganizationUnit(envVars.expand(folderName.trim()));
 
             ResourceBundle rb = ResourceBundle.getBundle("config");
-            String orchestratorTenantFormatted = envVars.expand(orchestratorTenant.trim()).isEmpty() ? util.getConfigValue(rb, "UiPath.DefaultTenant") : envVars.expand(orchestratorTenant.trim());
+            String orchestratorTenantFormatted = envVars.expand(orchestratorTenant.trim()).isEmpty()
+                    ? util.getConfigValue(rb, "UiPath.DefaultTenant") : envVars.expand(orchestratorTenant.trim());
             deployOptions.setOrchestratorTenant(orchestratorTenantFormatted);
 
             util.setCredentialsFromCredentialsEntry(credentials, deployOptions, run);
 
-            if (this.environments != null && !this.environments.isEmpty())
-            {
+            String language = Locale.getDefault().getLanguage();
+            String country = Locale.getDefault().getCountry();
+            String localization = country.isEmpty() ? language : language + "-" + country;
+            deployOptions.setLanguage(localization);
+
+            deployOptions.setTraceLevel(traceLevel);
+
+            if (this.environments != null && !this.environments.isEmpty()) {
                 String[] deploymentEnvironments = envVars.expand(this.environments).split(",");
                 deployOptions.setEnvironments(Arrays.asList(deploymentEnvironments));
             }
-            else
-            {
+            else {
                 deployOptions.setEnvironments(new ArrayList<>());
             }
+
+            if (this.entryPointPaths != null && !this.entryPointPaths.isEmpty()) {
+                String[] entryPoints = envVars.expand(this.entryPointPaths).split(",");
+                deployOptions.setEntryPointPaths(Arrays.asList(entryPoints));
+            }
+            else {
+                deployOptions.setEntryPointPaths(new ArrayList<>());
+            }
+            deployOptions.setCreateProcess(createProcess);
 
             util.execute("DeployOptions", deployOptions, tempRemoteDir, listener, envVars, launcher, true);
         } catch (URISyntaxException e) {
             e.printStackTrace(logger);
             throw new AbortException(e.getMessage());
         } finally {
-            try{
+            try {
                 Objects.requireNonNull(tempRemoteDir).deleteRecursive();
-            }catch(Exception e){
-                logger.println("Failed to delete temp remote directory in UiPath Deploy "+ e.getMessage());
+            } catch(Exception e) {
+                logger.println(com.uipath.uipathpackage.Messages.GenericErrors_FailedToDeleteTempDeploy() + e.getMessage());
                 e.printStackTrace(logger);
             }
         }
     }
 
     private void validateParameters() throws AbortException {
-        util.validateParams(packagePath, "Invalid Package(s) Path");
-        util.validateParams(orchestratorAddress, "Invalid Orchestrator Address");
-        util.validateParams(folderName, "Invalid Orchestrator Folder");
+        util.validateParams(packagePath, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidPackage());
+        util.validateParams(orchestratorAddress, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOrchAddress());
+        util.validateParams(folderName, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOrchFolder());
+        util.validateParams(getEntryPointPaths(), com.uipath.uipathpackage.Messages.ValidationErrors_InvalidEntryPoint());
 
-        if (credentials == null)
-        {
-            throw new InvalidParameterException("You must specify either a set of credentials or an authentication token");
+        if (credentials == null) {
+            throw new InvalidParameterException(com.uipath.uipathpackage.Messages.ValidationErrors_InvalidCredentialsType());
         }
 
         credentials.validateParameters();
 
         if (packagePath.toUpperCase().contains("${JENKINS_HOME}")) {
-            throw new AbortException("Paths containing JENKINS_HOME are not allowed, use the Archive Artifacts plugin to copy the required files to the build output.");
+            throw new AbortException(com.uipath.uipathpackage.Messages.ValidationErrors_InvalidPath());
         }
     }
 
@@ -284,12 +344,29 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
         }
 
         /**
+         * Validates Entry Point Paths
+         *
+         * @param value value of entry point paths
+         * @return FormValidation
+         */
+        public FormValidation doCheckEntryPointPaths(@QueryParameter String value) {
+            if (value.trim().isEmpty()) {
+                return FormValidation.error(com.uipath.uipathpackage.Messages.GenericErrors_MissingEntryPoint());
+            }
+            return FormValidation.ok();
+        }
+
+        /**
          * Provides the list of descriptors to the choice in hetero-radio
          *
          * @return list of the authentication descriptors
          */
         public List<Descriptor> getAuthenticationDescriptors() {
-            Jenkins jenkins = Jenkins.getInstance();
+            Jenkins jenkins = Jenkins.getInstanceOrNull();
+            if (jenkins == null) {
+                return new ArrayList<>();
+            }
+
             List<Descriptor> list = new ArrayList<>();
             Descriptor userPassDescriptor = jenkins.getDescriptor(UserPassAuthenticationEntry.class);
             if (userPassDescriptor != null) {
@@ -299,7 +376,31 @@ public class UiPathDeploy extends Recorder implements SimpleBuildStep {
             if (tokenDescriptor != null) {
                 list.add(tokenDescriptor);
             }
+            Descriptor externalAppDescriptor = jenkins.getDescriptor(ExternalAppAuthenticationEntry.class);
+            if (externalAppDescriptor != null) {
+                list.add(externalAppDescriptor);
+            }
             return ImmutableList.copyOf(list);
+        }
+
+        /**
+         * Returns the list of Strings to be filled in choice
+         * If item is null or doesn't have configure permission it will return empty list
+         *
+         * @param item Basic configuration unit in Hudson
+         * @return ListBoxModel list of String
+         */
+        public ListBoxModel doFillTraceLevelItems(@AncestorInPath Item item) {
+            if (item == null || !item.hasPermission(Item.CONFIGURE)) {
+                return new ListBoxModel();
+            }
+
+            ListBoxModel result= new ListBoxModel();
+            for (TraceLevel v: TraceLevel.values()) {
+                result.add(v.toString(), v.toString());
+            }
+
+            return result;
         }
     }
 }

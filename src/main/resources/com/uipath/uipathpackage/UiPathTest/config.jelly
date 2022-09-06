@@ -45,7 +45,7 @@
     <f:entry field="orchestratorTenant" title="${%OrchestratorTenant}">
         <f:textbox/>
     </f:entry>
-    <f:entry field="folderName" title="${%OrchestratorFolder}" >
+    <f:entry field="folderName" title="${%OrchestratorFolder}">
         <f:textbox/>
     </f:entry>
     <f:entry field="credentialsEntry" title="${%ChooseAuthenticationMethod}">
@@ -54,7 +54,16 @@
     <f:entry field="testResultsOutputPath" title="${%TestResultsOutputPath}">
         <f:textbox/>
     </f:entry>
+    <f:entry field="parametersFilePath" title="${%ParametersFilePath}">
+        <f:textbox/>
+    </f:entry>
     <f:entry field="timeout" title="${%Timeout}">
         <f:textbox/>
+    </f:entry>
+    <f:entry title="${%TraceLevel}" field="traceLevel">
+        <f:select/>
+    </f:entry>
+    <f:entry title="${%AttachRobotLogs}" field="attachRobotLogs">
+        <f:checkbox default="false"/>
     </f:entry>
 </j:jelly>

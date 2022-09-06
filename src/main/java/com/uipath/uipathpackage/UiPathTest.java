@@ -2,11 +2,13 @@ package com.uipath.uipathpackage;
 
 import com.google.common.collect.ImmutableList;
 import com.uipath.uipathpackage.entries.SelectEntry;
+import com.uipath.uipathpackage.entries.authentication.ExternalAppAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.TokenAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.UserPassAuthenticationEntry;
 import com.uipath.uipathpackage.entries.testExecutionTarget.TestProjectEntry;
 import com.uipath.uipathpackage.entries.testExecutionTarget.TestSetEntry;
 import com.uipath.uipathpackage.models.TestOptions;
+import com.uipath.uipathpackage.util.TraceLevel;
 import com.uipath.uipathpackage.util.Utility;
 import hudson.*;
 import hudson.model.*;
@@ -17,11 +19,15 @@ import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.test.TestResultProjectAction;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
+
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
 import javax.annotation.Nonnull;
@@ -44,8 +50,11 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
     private final SelectEntry testTarget;
     private final Integer timeout;
     private final String testResultsOutputPath;
-    private String expandedTestResultsOutputPath;
-
+    private final String parametersFilePath;
+    private String testResultIncludes;
+    private final TraceLevel traceLevel;
+    private boolean attachRobotLogs;
+    
     private static int TimeoutDefault = 7200;
 
     /**
@@ -59,15 +68,18 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
     /**
      * Data bound constructor responsible for setting the values param values to state
      *
-     * @param orchestratorAddress  UiPath Orchestrator base URL
-     * @param orchestratorTenant   UiPath Orchestrator tenant
-     * @param testTarget           Test target
-     * @param credentials          UiPath Orchestrator credentials
+     * @param orchestratorAddress   UiPath Orchestrator base URL
+     * @param orchestratorTenant    UiPath Orchestrator tenant
+     * @param folderName            Folder Name
+     * @param testTarget            Test target
+     * @param credentials           UiPath Orchestrator credentials
      * @param testResultsOutputPath Test result output path (JUnit format)
-     * @param timeout              Timeout
+     * @param timeout               Timeout
+     * @param traceLevel            The trace logging level. One of the following values: None, Critical, Error, Warning, Information, Verbose. (default None)
+     * @param parametersFilePath    Path of the parameter file
      */
     @DataBoundConstructor
-    public UiPathTest(String orchestratorAddress, String orchestratorTenant, String folderName, SelectEntry testTarget, SelectEntry credentials, String testResultsOutputPath, Integer timeout)  {
+    public UiPathTest(String orchestratorAddress, String orchestratorTenant, String folderName, SelectEntry testTarget, SelectEntry credentials, String testResultsOutputPath, Integer timeout, TraceLevel traceLevel, String parametersFilePath)  {
         this.testTarget = testTarget;
         this.orchestratorAddress = orchestratorAddress;
         this.orchestratorTenant = orchestratorTenant;
@@ -75,6 +87,9 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
         this.credentials = credentials;
         this.timeout = timeout;
         this.testResultsOutputPath = testResultsOutputPath;
+		this.parametersFilePath = parametersFilePath;
+        this.traceLevel = traceLevel;
+        this.attachRobotLogs = false;
     }
 
     /**
@@ -134,7 +149,6 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
             testOptions.setOrchestratorUrl(orchestratorAddress);
             testOptions.setOrchestratorTenant(orchestratorTenantFormatted);
             testOptions.setOrganizationUnit(envVars.expand(folderName.trim()));
-
             testOptions.setTestReportType("junit");
 
             String resultsOutputPath = testResultsOutputPath != null && !testResultsOutputPath.trim().isEmpty()
@@ -149,13 +163,51 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
 
             util.setCredentialsFromCredentialsEntry(credentials, testOptions, run);
 
+            String language = Locale.getDefault().getLanguage();
+            String country = Locale.getDefault().getCountry();
+            String localization = country.isEmpty() ? language : language + "-" + country;
+            testOptions.setLanguage(localization);
+
+            testOptions.setTraceLevel(traceLevel);
+
+            if (parametersFilePath != null && !parametersFilePath.isEmpty())
+            {
+                FilePath parametersPath = parametersFilePath.contains("${WORKSPACE}") ?
+                        new FilePath(launcher.getChannel(), envVars.expand(parametersFilePath)) :
+                        workspace.child(envVars.expand(parametersFilePath));
+                parametersPath.mkdirs();
+
+                testOptions.setParametersFilePath(parametersPath.getRemote());
+            }
+            
+            testOptions.setAttachRobotLogs(attachRobotLogs);
+            
             int result = util.execute("RunTestsOptions", testOptions, tempRemoteDir, listener, envVars, launcher, false);
 
             if (result != 0 && !expandedTestResultsOutputPath.exists()) {
-                throw new AbortException("Failed to run the command");
+                throw new AbortException(com.uipath.uipathpackage.Messages.GenericErrors_FailedToRunCommand());
             }
 
-            this.expandedTestResultsOutputPath = envVars.expand(resultsOutputPath);
+            String workspacePath = workspace.getRemote();
+            this.testResultIncludes = expandedTestResultsOutputPath.getRemote();
+            if (this.testResultIncludes.startsWith(workspacePath)) {
+                this.testResultIncludes = this.testResultIncludes.substring(workspacePath.length());
+                while ((this.testResultIncludes.startsWith("/") || this.testResultIncludes.startsWith("\\")) && this.testResultIncludes.length() > 1) {
+                    this.testResultIncludes = this.testResultIncludes.substring(1);
+                }
+            }
+
+            if (!expandedTestResultsOutputPath.getName().contains(".")) {
+                if (!this.testResultIncludes.endsWith("/") && !this.testResultIncludes.endsWith("\\")) {
+                    if (launcher.isUnix()) {
+                        this.testResultIncludes += "/";
+                    } else {
+                        this.testResultIncludes += "\\";
+                    }
+                }
+
+                this.testResultIncludes += "*.xml";
+            }
 
             run.addAction(new TestResultProjectAction(run.getParent()));
             publishTestResults(run, workspace, launcher, listener);
@@ -163,10 +215,10 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
             e.printStackTrace(listener.getLogger());
             throw new AbortException(e.getMessage());
         } finally {
-            try{
+            try {
                 Objects.requireNonNull(tempRemoteDir).deleteRecursive();
-            }catch(Exception e){
-                listener.getLogger().println("Failed to delete temp remote directory in UiPath Pack "+ e.getMessage());
+            } catch(Exception e) {
+                listener.getLogger().println(com.uipath.uipathpackage.Messages.GenericErrors_FailedToDeleteTempTest() + e.getMessage());
                 e.printStackTrace(listener.getLogger());
             }
         }
@@ -239,34 +291,72 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
         return testResultsOutputPath;
     }
 
-    private void validateParameters() throws AbortException {
+    /**
+     * traceLevel
+     *
+     * @return TraceLevel traceLevel
+     */
+    public TraceLevel getTraceLevel() {
+        return traceLevel;
+    }
 
-        if (testTarget == null)
-        {
+    /**
+     * parametersFilePath
+     *
+     * @return String parametersFilePath
+     */
+    public String getParametersFilePath() {
+        return parametersFilePath;
+    }
+    
+    /**
+     * attachRobotLogs
+     *
+     * @return boolean attachRobotLogs
+     */
+    public boolean getAttachRobotLogs() {
+		return attachRobotLogs;
+	}
+
+    /**
+     * attachRobotLogs
+     *
+     * @param attachRobotLogs   Boolean field whether to attach the robot logs
+     */
+    @DataBoundSetter
+    public void setAttachRobotLogs(boolean attachRobotLogs) {
+    	this.attachRobotLogs = attachRobotLogs;
+    }
+    
+	private void validateParameters() throws AbortException {
+        if (testTarget == null) {
             throw new InvalidParameterException(com.uipath.uipathpackage.Messages.GenericErrors_MissingTestSetOrProjectPath());
         }
 
         testTarget.validateParameters();
 
         Utility util = new Utility();
-        util.validateParams(this.orchestratorAddress, "Invalid Orchestrator address");
-        util.validateParams(this.folderName, "Invalid Orchestrator folder");
+        util.validateParams(this.orchestratorAddress, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOrchAddress());
+        util.validateParams(this.folderName, com.uipath.uipathpackage.Messages.ValidationErrors_InvalidOrchFolder());
 
-        if (credentials == null)
-        {
+        if (credentials == null) {
             throw new InvalidParameterException(com.uipath.uipathpackage.Messages.GenericErrors_MissingAuthenticationMethod());
         }
 
         credentials.validateParameters();
 
         if (testResultsOutputPath != null && testResultsOutputPath.toUpperCase().contains("${JENKINS_HOME}")) {
-            throw new AbortException("Paths containing JENKINS_HOME are not allowed, use the Copy To Slave plugin to copy the required files to the slave's workspace instead.");
+            throw new AbortException(com.uipath.uipathpackage.Messages.ValidationErrors_InvalidPath());
         }
     }
 
     private void publishTestResults(Run<?,?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
         try {
             TestResultAction action = JUnitResultArchiver.parseAndAttach(this, null, run, workspace, launcher, listener);
+            if (action != null && StringUtils.isNotEmpty(action.getResult().getStdout())) {
+                String stdOut = action.getResult().getStdout();
+                listener.getLogger().println(Messages.UiPathTest_DescriptorImpl_TestRunUrl()+stdOut.substring(stdOut.indexOf("ms.")+3,stdOut.length()));        
+            }
             if (action != null && action.getResult().getFailCount() > 0) {
                 run.setResult(Result.UNSTABLE);
             }
@@ -278,12 +368,7 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
 
     @Override
     public String getTestResults() {
-        if (this.expandedTestResultsOutputPath != null && !this.expandedTestResultsOutputPath.isEmpty())
-        {
-            return this.expandedTestResultsOutputPath;
-        }
-
-        return "UiPathResults.xml";
+        return this.testResultIncludes;
     }
 
     @Override
@@ -304,6 +389,16 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
     @Override
     public boolean isAllowEmptyResults() {
         return true;
+    }
+
+    // Add @Override once we switch to minimum JUnit plugin version 1.4x
+    public boolean isSkipPublishingChecks() {
+        return false;
+    }
+
+    // Add @Override once we switch to minimum JUnit plugin version 1.4x
+    public String getChecksName() {
+        return "UiPath Tests";
     }
 
     /**
@@ -341,7 +436,11 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
          * @return list of the Entry descriptors
          */
         public List<Descriptor> getEntryDescriptors() {
-            Jenkins jenkins = Jenkins.getInstance();
+            Jenkins jenkins = Jenkins.getInstanceOrNull();
+            if (jenkins == null) {
+                return new ArrayList<>();
+            }
+
             List<Descriptor> list = new ArrayList<>();
 
             Descriptor testSetDescriptor = jenkins.getDescriptor(TestSetEntry.class);
@@ -363,7 +462,11 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
          * @return list of the authentication descriptors
          */
         public List<Descriptor> getAuthenticationDescriptors() {
-            Jenkins jenkins = Jenkins.getInstance();
+            Jenkins jenkins = Jenkins.getInstanceOrNull();
+            if (jenkins == null) {
+                return new ArrayList<>();
+            }
+
             List<Descriptor> list = new ArrayList<>();
             Descriptor userPassDescriptor = jenkins.getDescriptor(UserPassAuthenticationEntry.class);
             if (userPassDescriptor != null) {
@@ -372,6 +475,10 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
             Descriptor tokenDescriptor = jenkins.getDescriptor(TokenAuthenticationEntry.class);
             if (tokenDescriptor != null) {
                 list.add(tokenDescriptor);
+            }
+            Descriptor externalAppDescriptor = jenkins.getDescriptor(ExternalAppAuthenticationEntry.class);
+            if (externalAppDescriptor != null) {
+                list.add(externalAppDescriptor);
             }
             return ImmutableList.copyOf(list);
         }
@@ -403,6 +510,20 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
         }
 
         /**
+         * Validates ParametersFilePath
+         *
+         * @param value value of parameters file path
+         * @return FormValidation
+         */
+        public FormValidation doCheckParametersFilePath(@QueryParameter String value) {
+            if (value.trim().toUpperCase().contains("${JENKINS_HOME}")) {
+                return FormValidation.error(Messages.GenericErrors_MustUseSlavePaths());
+            }
+
+            return FormValidation.ok();
+        }
+        
+        /**
          * Validates that the timeout is specified
          *
          * @param item  Basic configuration unit in Hudson
@@ -421,6 +542,26 @@ public class UiPathTest extends Recorder implements SimpleBuildStep, JUnitTask {
             }
 
             return FormValidation.ok();
+        }
+
+        /**
+         * Returns the list of Strings to be filled in choice
+         * If item is null or doesn't have configure permission it will return empty list
+         *
+         * @param item Basic configuration unit in Hudson
+         * @return ListBoxModel list of String
+         */
+        public ListBoxModel doFillTraceLevelItems(@AncestorInPath Item item) {
+            if (item == null || !item.hasPermission(Item.CONFIGURE)) {
+                return new ListBoxModel();
+            }
+
+            ListBoxModel result= new ListBoxModel();
+            for (TraceLevel v: TraceLevel.values()) {
+                result.add(v.toString(), v.toString());
+            }
+
+            return result;
         }
     }
 }
