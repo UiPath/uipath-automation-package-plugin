@@ -1,6 +1,6 @@
 buildPlugin(
     tests: [skip: true],
     configurations: [
-        [platform: 'windows', jdk: '11', jenkins: '2.414.3'],
+        [platform: 'windows', jdk: '17', jenkins: '2.516'],
       ]
 )

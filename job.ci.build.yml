@@ -28,16 +28,16 @@ steps:
     scannerMode: Other
 
 - task: Maven@3
-  displayName: 'Build plugin package (Java 11)'
+  displayName: 'Build plugin package (Java 17)'
   inputs:
     javaHomeOption: 'JDKVersion'
-    jdkVersionOption: 1.11
+    jdkVersionOption: 1.17
     mavenPomFile: $(MavenPOMFile)
     testResultsFiles: '**/TEST-*.xml'
     sonarQubeRunAnalysis: false
     findBugsRunAnalysis: false
     sqMavenPluginVersionChoice: 'latest'
-    options: '-DskipTests -Duser.name=UiPath --no-transfer-progress -Dmaven.artifact.threads=16 -T 4 -DrerunFailingTestsCount=0'
+    options: '-Duser.name=UiPath --no-transfer-progress -Dmaven.artifact.threads=16 -T 4 -DrerunFailingTestsCount=0'
 
 - ${{ if eq(parameters.publishArtifacts, 'true') }}:
     - task: PublishBuildArtifacts@1
