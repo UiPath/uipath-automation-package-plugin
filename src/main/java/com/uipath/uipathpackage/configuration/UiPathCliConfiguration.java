@@ -25,7 +25,6 @@ import java.util.regex.Matcher;
 public final class UiPathCliConfiguration {
 
     private static UiPathCliConfiguration INSTANCE = null;
-    private static AddEnvironmentVariablesAction ENV_ACTION_INSTANCE = new AddEnvironmentVariablesAction();
     public static final String WIN_PLATFORM = "Windows";
     public static final String SELECTED_CLI_VERSION_KEY = "SELECTED_CLI_VERSION_KEY";
     public static final String DEFAULT_CLI_VERSION_KEY = "UiPath.CLI.Version";
@@ -87,10 +86,14 @@ public final class UiPathCliConfiguration {
 
     public void updateSelectedCliVersionKey(@NonNull Run<?, ?> run, @Nonnull String cliVersionKey) throws AbortException {
         Map<String, String> addedEnvVars = Collections.singletonMap(SELECTED_CLI_VERSION_KEY, cliVersionKey);
-        ENV_ACTION_INSTANCE.setAddedEnvironmentVariables(addedEnvVars);
+        AddEnvironmentVariablesAction envAction = run.getAction(AddEnvironmentVariablesAction.class);
 
-        if(run.getAction(AddEnvironmentVariablesAction.class) == null) {
-            run.addAction(ENV_ACTION_INSTANCE);
+        if(envAction == null) {
+            envAction = new AddEnvironmentVariablesAction();
+            envAction.setAddedEnvironmentVariables(addedEnvVars);
+            run.addAction(envAction);
+        } else {
+            envAction.setAddedEnvironmentVariables(addedEnvVars);
         }
     }
 
@@ -103,7 +106,6 @@ public final class UiPathCliConfiguration {
     public FilePath getCliRootCachedDirectoryPath(@Nonnull Launcher launcher, @Nonnull EnvVars env, String cliVersionKey) throws IOException, InterruptedException {
         if (!cliConfigurationMap.containsKey(cliVersionKey)) {
             launcher.getListener().getLogger().println("(cacheRootPath) invalid cli configuration might have caused this issue.");
-            cliConfigurationMap.forEach((key, value) -> launcher.getListener().getLogger().println(" Key: " + key + ", Value: " + value));
             throw new AbortException("(cacheRootPath) invalid cli configuration might have caused this issue. Version key: " + cliVersionKey);
         }
 
@@ -112,6 +114,7 @@ public final class UiPathCliConfiguration {
         FilePath cliHomeDir = getCliHomeDirectory(launcher,env);
         FilePath cachedRootPath = cliHomeDir.child("cached").child(configuration.getName()).child(configuration.getVersion().getComplete());
         cachedRootPath.mkdirs();
+
         return cachedRootPath;
     }
 
@@ -126,6 +129,8 @@ public final class UiPathCliConfiguration {
         FilePath cliHomeDir = getCliHomeDirectory(launcher,env);
         FilePath downloadsRootPath = cliHomeDir.child("downloads").child(configuration.getName()).child(configuration.getVersion().getComplete());
         downloadsRootPath.mkdirs();
+        launcher.getListener().getLogger().println("Cli root download directory: " + downloadsRootPath.getRemote());
+
         return downloadsRootPath;
     }
 

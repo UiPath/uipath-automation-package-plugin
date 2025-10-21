@@ -36,13 +36,13 @@
             }
         </style>
     </f:block>
-    <f:entry title="Package Name" field="name">
+    <f:entry title="Package Name" field="packageName">
         <f:textbox/>
     </f:entry>
     <f:entry title="Destination Path" field="destinationPath">
         <f:textbox/>
     </f:entry>
-    <f:entry title="Package Version" field="version">
+    <f:entry title="Package Version" field="packageVersion">
         <f:textbox/>
     </f:entry>
     <f:entry title="Destination File Name" field="fileName">

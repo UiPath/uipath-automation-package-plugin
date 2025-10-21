@@ -246,7 +246,7 @@ public class UiPathSolutionDeploy extends Recorder implements SimpleBuildStep {
 
         public FormValidation doCheckDeploymentFolderName(@QueryParameter String value) {
             if (value == null || value.trim().isEmpty())
-                return FormValidation.error("Solution root folder name is required.");
+                return FormValidation.error("Solution deployment folder name is required.");
             return FormValidation.ok();
         }
 

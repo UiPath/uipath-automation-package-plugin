@@ -104,7 +104,7 @@ public class Utility {
         UiPathCliConfiguration cliConfiguration = UiPathCliConfiguration.getInstance();
 
         String version = cliConfiguration.getSelectedOrDefaultCliVersionKey(envVars);
-        launcher.getListener().getLogger().println("Selected CLI version: " + envVars.get("SELECTED_CLI_VERSION_KEY"));
+        launcher.getListener().getLogger().println("Selected CLI version: " + envVars.get(UiPathCliConfiguration.SELECTED_CLI_VERSION_KEY));
         launcher.getListener().getLogger().println("Used CLI version: " + version);
         Optional<FilePath> cachedCliPath = cliConfiguration.getCliPath(launcher, envVars, version);
 
