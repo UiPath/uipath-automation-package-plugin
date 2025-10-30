@@ -102,7 +102,11 @@ public class Utility {
             @Nonnull EnvVars envVars,
             @Nonnull Launcher launcher) throws IOException, InterruptedException, URISyntaxException {
         UiPathCliConfiguration cliConfiguration = UiPathCliConfiguration.getInstance();
-        Optional<FilePath> cachedCliPath = cliConfiguration.getCliPath(launcher, envVars, cliConfiguration.getSelectedOrDefaultCliVersionKey(envVars));
+
+        String version = cliConfiguration.getSelectedOrDefaultCliVersionKey(envVars);
+        launcher.getListener().getLogger().println("Selected CLI version: " + envVars.get("SELECTED_CLI_VERSION_KEY"));
+        launcher.getListener().getLogger().println("Used CLI version: " + version);
+        Optional<FilePath> cachedCliPath = cliConfiguration.getCliPath(launcher, envVars, version);
 
         FilePath cliPath;
         CliGetFlow cliGetFlow;

@@ -4,6 +4,16 @@ stages:
   dependsOn: 'Deploy'
   condition: succeeded()
   jobs:
+
+  - deployment: ApprovalGate
+    displayName: Approval for E2E tests
+    environment: TestApprovalEnv
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - script: echo "Approval granted. Proceeding to tests."
+
   - template: job.ci.test.template.yml
     parameters:
       configurations:
