@@ -200,7 +200,7 @@ public final class UiPathCliConfiguration {
         // Pattern: UiPath.CLI.{Platform}.{Version}
         // Platform can be: Windows, Windows.Legacy, Linux, Mac
         // Version can be: 25.10.0-20251017-19 or 25.10.9424.14050
-        Pattern packageRegex = Pattern.compile("^UiPath\\.CLI\\.(Windows\\.Legacy|Windows|Linux|Mac)\\.(\\d+\\.\\d+\\.\\d+(?:[.-]\\d+)*(?:-[^.]+)?)$");
+        Pattern packageRegex = Pattern.compile("^UiPath\\.CLI\\.(Windows\\.Legacy|Windows|Linux|Mac)\\.(\\d+\\.\\d+\\.\\d+(?:\\.\\d+)*(?:-\\d+(?:-\\d+)*)?)$");
         Matcher match = packageRegex.matcher(packageName);
 
         if (!match.matches()) {

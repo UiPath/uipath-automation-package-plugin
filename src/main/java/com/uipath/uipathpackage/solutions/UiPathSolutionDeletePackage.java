@@ -140,7 +140,6 @@ public class UiPathSolutionDeletePackage extends Recorder implements SimpleBuild
                 if (tempRemoteDir != null) tempRemoteDir.deleteRecursive();
             } catch (Exception e) {
                 logger.println("Failed to delete temp folder after solution delete: " + e.getMessage());
-                e.printStackTrace(logger);
             }
         }
     }

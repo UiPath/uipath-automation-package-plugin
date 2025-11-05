@@ -190,7 +190,6 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
                 if (tempRemoteDir != null) tempRemoteDir.deleteRecursive();
             } catch (Exception e) {
                 logger.println("Failed to delete temp folder after solution config download: " + e.getMessage());
-                e.printStackTrace(logger);
             }
         }
     }
