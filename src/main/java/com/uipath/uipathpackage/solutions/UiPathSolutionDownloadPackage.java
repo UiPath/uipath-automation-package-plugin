@@ -173,7 +173,6 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
                 if (tempRemoteDir != null) tempRemoteDir.deleteRecursive();
             } catch (Exception e) {
                 logger.println("Failed to delete temp folder after solution download: " + e.getMessage());
-                e.printStackTrace(logger);
             }
         }
     }

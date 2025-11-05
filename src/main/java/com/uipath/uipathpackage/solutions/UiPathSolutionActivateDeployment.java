@@ -135,7 +135,6 @@ public class UiPathSolutionActivateDeployment extends Recorder implements Simple
                 if (tempRemoteDir != null) tempRemoteDir.deleteRecursive();
             } catch (Exception e) {
                 logger.println("Failed to delete temp folder after solution deployment activation: " + e.getMessage());
-                e.printStackTrace(logger);
             }
         }
     }

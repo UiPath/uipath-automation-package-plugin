@@ -198,7 +198,6 @@ public class UiPathSolutionPack extends Builder implements SimpleBuildStep {
                 Objects.requireNonNull(tempRemoteDir).deleteRecursive();
             } catch (Exception e) {
                 listener.getLogger().println(com.uipath.uipathpackage.Messages.GenericErrors_FailedToDeleteTempPack() + e.getMessage());
-                e.printStackTrace(listener.getLogger());
             }
         }
     }
