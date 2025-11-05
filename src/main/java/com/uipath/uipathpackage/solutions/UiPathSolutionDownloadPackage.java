@@ -39,9 +39,9 @@ import java.util.Locale;
 import static hudson.slaves.WorkspaceList.tempDir;
 
 public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBuildStep {
-    private final String name;
+    private final String packageName;
     private final String destinationPath;
-    private String version;
+    private String packageVersion;
     private String fileName;
 
     private final SelectEntry credentials;
@@ -50,13 +50,13 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
     private final String orchestratorTenant;
 
     @DataBoundConstructor
-    public UiPathSolutionDownloadPackage(String name,
+    public UiPathSolutionDownloadPackage(String packageName,
                                          String destinationPath,
                                          SelectEntry credentials,
                                          TraceLevel traceLevel,
                                          String orchestratorAddress,
                                          String orchestratorTenant) {
-        this.name = name;
+        this.packageName = packageName;
         this.destinationPath = destinationPath;
         this.credentials = credentials;
         this.traceLevel = traceLevel;
@@ -65,8 +65,8 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
     }
 
     @DataBoundSetter
-    public void setVersion(String version) {
-        this.version = version;
+    public void setPackageVersion(String packageVersion) {
+        this.packageVersion = packageVersion;
     }
 
     @DataBoundSetter
@@ -74,16 +74,16 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
         this.fileName = fileName;
     }
 
-    public String getName() {
-        return name;
+    public String getPackageName() {
+        return packageName;
     }
 
     public String getDestinationPath() {
         return destinationPath;
     }
 
-    public String getVersion() {
-        return version;
+    public String getPackageVersion() {
+        return packageVersion;
     }
 
     public String getFileName() {
@@ -134,10 +134,10 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
                 options.setPipelineCorrelationId(buildTag);
                 options.setCliGetFlow(cliDetails.getGetFlow());
             }
-            options.setPackageName(envVars.expand(name));
+            options.setPackageName(envVars.expand(packageName));
             options.setDestinationPath(expandedDestinationPath.getRemote());
-            if (version != null && !version.trim().isEmpty()) {
-                options.setPackageVersion(envVars.expand(version));
+            if (packageVersion != null && !packageVersion.trim().isEmpty()) {
+                options.setPackageVersion(envVars.expand(packageVersion));
             }
             if (fileName != null && !fileName.trim().isEmpty()) {
                 options.setFileName(envVars.expand(fileName));
@@ -180,7 +180,7 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
 
     private void validateParameters() throws AbortException {
         Utility util = new Utility();
-        util.validateParams(name, "Invalid solution package name");
+        util.validateParams(packageName, "Invalid solution package name");
         util.validateParams(destinationPath, "Invalid destination path");
         util.validateParams(orchestratorAddress, "Invalid orchestrator address");
         util.validateParams(orchestratorTenant, "Invalid orchestrator tenant");
@@ -202,8 +202,8 @@ public class UiPathSolutionDownloadPackage extends Recorder implements SimpleBui
             return "UiPath Solution: Download Package";
         }
 
-        public FormValidation doCheckName(@QueryParameter String value) {
-            if (value == null || value.trim().isEmpty()) return FormValidation.error("Solution name is required.");
+        public FormValidation doCheckPackageName(@QueryParameter String value) {
+            if (value == null || value.trim().isEmpty()) return FormValidation.error("Solution package name is required.");
             return FormValidation.ok();
         }
 

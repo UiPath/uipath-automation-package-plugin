@@ -15,8 +15,8 @@ $ActivitiesFolders = @{"ExternalAppAuthenticationEntry" = "entries\\authenticati
                        "TestSetEntry" = "entries\\testExecutionTarget\\TestSetEntry";
                        "UiPathSolutionDeletePackage" = "solutions\\UiPathSolutionDeletePackage";
                        "UiPathSolutionDeploy" = "solutions\\UiPathSolutionDeploy";
-                       "UiPathSolutionDeployActivate" = "solutions\\UiPathSolutionDeployActivate";
-                       "UiPathSolutionDeployUninstall" = "solutions\\UiPathSolutionDeployUninstall";
+                       "UiPathSolutionActivateDeployment" = "solutions\\UiPathSolutionActivateDeployment";
+                       "UiPathSolutionUninstallDeployment" = "solutions\\UiPathSolutionUninstallDeployment";
                        "UiPathSolutionDownloadConfig" = "solutions\\UiPathSolutionDownloadConfig";
                        "UiPathSolutionDownloadPackage" = "solutions\\UiPathSolutionDownloadPackage";
                        "UiPathSolutionUploadPackage" = "solutions\\UiPathSolutionUploadPackage";

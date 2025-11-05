@@ -98,14 +98,13 @@ public class UiPathInstallPlatform extends Builder implements SimpleBuildStep {
             logger.println("Validating CLI selected version: " + versionConfiguration.getDisplayName() + "...");
             validateCliCompatibility(versionConfiguration, logger, workspace);
 
-            cliConfiguration.updateSelectedCliVersionKey(run, scopedVersion);
             boolean isSelectedCliAlreadyCached = cliConfiguration.getCliPath(launcher, envVars, scopedVersion).isPresent();
 
-            logger.println(isSelectedCliAlreadyCached ? "cli" + scopedVersion + " is already cached.." : "cli is not found in cache..");
+            logger.println(isSelectedCliAlreadyCached ? "cli " + scopedVersion + " is already cached.." : "cli " + scopedVersion + " is not found in cache..");
 
             if(this.forceInstall || !isSelectedCliAlreadyCached) {
                 if(forceInstall) {
-                    logger.println("force installing the cli , any previous cache for version " + scopedVersion + " will be invalidate..");
+                    logger.println("force installing the cli , any previous cache for version " + scopedVersion + " will be invalidated..");
                 }
 
                 FilePath cliRootCacheDirPath = cliConfiguration.getCliRootCachedDirectoryPath(launcher, envVars, scopedVersion);
@@ -119,7 +118,7 @@ public class UiPathInstallPlatform extends Builder implements SimpleBuildStep {
                         logger.println("CliNupkgPath provided doesn't exists "+actualCliNupkgPath.getRemote());
                         throw new AbortException(Messages.UiPathInstallPlatform_DescriptorImpl_Error_CliNupkgPath());
                     }
-                    logger.print("(caching) extracting provided cli-nuget from path " + actualCliNupkgPath.getRemote());
+                    logger.println("(caching) extracting provided cli-nuget from path " + actualCliNupkgPath.getRemote());
                     actualCliNupkgPath.unzip(cliRootCacheDirPath);
                 } else {
                     UiPathCliConfiguration.Configuration configuration = cliConfiguration.getConfiguration().get(scopedVersion);
@@ -130,11 +129,13 @@ public class UiPathInstallPlatform extends Builder implements SimpleBuildStep {
                     FilePath downloadCliPath = downloadsRootPath.child(fileName);
                     util.downloadCli(configuration.getFeedUrl(), downloadCliPath, listener);
 
-                    logger.print("(caching) extracting the downloaded cli...");
+                    logger.println("(caching) extracting the downloaded cli...");
                     downloadCliPath.unzip(cliRootCacheDirPath);
                 }
                 logger.println("Finished extraction for UipCLI version: " + scopedVersion);
             }
+
+            cliConfiguration.updateSelectedCliVersionKey(run, scopedVersion);
         } catch (Exception e) {
             if(traceLevel.equals(TraceLevel.Verbose) || traceLevel.equals(TraceLevel.Error)) {
                 e.printStackTrace(logger);

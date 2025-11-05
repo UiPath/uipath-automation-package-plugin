@@ -40,12 +40,12 @@ import java.util.Locale;
 import static hudson.slaves.WorkspaceList.tempDir;
 
 /**
- * Downloads a solution configuration (YAML/JSON) for the specified solution name (and optional version).
+ * Downloads a solution configuration (YAML/JSON) for the specified package name (and optional version).
  */
 public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuildStep {
-    private final String name;
+    private final String packageName;
     private final String destinationPath;
-    private String version;
+    private String packageVersion;
     private String fileName;
     private ConfigFormat format;
 
@@ -61,7 +61,7 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
                                         TraceLevel traceLevel,
                                         String orchestratorAddress,
                                         String orchestratorTenant) {
-        this.name = name;
+        this.packageName = name;
         this.destinationPath = destinationPath;
         this.credentials = credentials;
         this.traceLevel = traceLevel;
@@ -70,8 +70,8 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
     }
 
     @DataBoundSetter
-    public void setVersion(String version) {
-        this.version = version;
+    public void setPackageVersion(String packageVersion) {
+        this.packageVersion = packageVersion;
     }
 
     @DataBoundSetter
@@ -84,16 +84,16 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
         this.format = format;
     }
 
-    public String getName() {
-        return name;
+    public String getPackageName() {
+        return packageName;
     }
 
     public String getDestinationPath() {
         return destinationPath;
     }
 
-    public String getVersion() {
-        return version;
+    public String getPackageVersion() {
+        return packageVersion;
     }
 
     public String getFileName() {
@@ -148,10 +148,10 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
                 options.setPipelineCorrelationId(buildTag);
                 options.setCliGetFlow(cliDetails.getGetFlow());
             }
-            options.setPackageName(envVars.expand(name));
+            options.setPackageName(envVars.expand(packageName));
             options.setDestinationPath(expandedDestinationPath.getRemote());
-            if (version != null && !version.trim().isEmpty()) {
-                options.setPackageVersion(envVars.expand(version.trim()));
+            if (packageVersion != null && !packageVersion.trim().isEmpty()) {
+                options.setPackageVersion(envVars.expand(packageVersion.trim()));
             }
             if (fileName != null && !fileName.trim().isEmpty()) {
                 options.setFileName(envVars.expand(fileName.trim()));
@@ -197,7 +197,7 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
 
     private void validateParameters() throws AbortException {
         Utility util = new Utility();
-        util.validateParams(name, "Invalid solution name");
+        util.validateParams(packageName, "Invalid solution name");
         util.validateParams(destinationPath, "Invalid destination path");
         util.validateParams(orchestratorAddress, "Invalid orchestrator address");
         util.validateParams(orchestratorTenant, "Invalid orchestrator tenant");
@@ -219,8 +219,8 @@ public class UiPathSolutionDownloadConfig extends Recorder implements SimpleBuil
             return "UiPath Solution: Download Config";
         }
 
-        public FormValidation doCheckName(@QueryParameter String value) {
-            if (value == null || value.trim().isEmpty()) return FormValidation.error("Solution name is required.");
+        public FormValidation doCheckPackageName(@QueryParameter String value) {
+            if (value == null || value.trim().isEmpty()) return FormValidation.error("Solution package name is required.");
             return FormValidation.ok();
         }
 

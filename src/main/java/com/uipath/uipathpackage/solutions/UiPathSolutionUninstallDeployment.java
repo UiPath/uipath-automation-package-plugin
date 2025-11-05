@@ -5,7 +5,7 @@ import com.uipath.uipathpackage.entries.SelectEntry;
 import com.uipath.uipathpackage.entries.authentication.ExternalAppAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.TokenAuthenticationEntry;
 import com.uipath.uipathpackage.entries.authentication.UserPassAuthenticationEntry;
-import com.uipath.uipathpackage.models.solutions.SolutionDeployActivateOptions;
+import com.uipath.uipathpackage.models.solutions.SolutionDeployUninstallOptions;
 import com.uipath.uipathpackage.util.CliDetails;
 import com.uipath.uipathpackage.util.TraceLevel;
 import com.uipath.uipathpackage.util.Utility;
@@ -38,9 +38,9 @@ import java.util.Locale;
 import static hudson.slaves.WorkspaceList.tempDir;
 
 /**
- * Activates a deployment
+ * Uninstalls a deployment
  */
-public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuildStep {
+public class UiPathSolutionUninstallDeployment extends Recorder implements SimpleBuildStep {
     private final String deploymentName;
     private final SelectEntry credentials;
     private final TraceLevel traceLevel;
@@ -48,11 +48,11 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
     private final String orchestratorTenant;
 
     @DataBoundConstructor
-    public UiPathSolutionDeployActivate(String deploymentName,
-                                        SelectEntry credentials,
-                                        TraceLevel traceLevel,
-                                        String orchestratorAddress,
-                                        String orchestratorTenant) {
+    public UiPathSolutionUninstallDeployment(String deploymentName,
+                                             SelectEntry credentials,
+                                             TraceLevel traceLevel,
+                                             String orchestratorAddress,
+                                             String orchestratorTenant) {
         this.deploymentName = deploymentName;
         this.credentials = credentials;
         this.traceLevel = traceLevel;
@@ -87,7 +87,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
         PrintStream logger = listener.getLogger();
         FilePath tempRemoteDir = tempDir(workspace);
         if (tempRemoteDir == null) {
-            throw new AbortException("Failed to create temp folder for solution deployment activation.");
+            throw new AbortException("Failed to create temp folder for solution deployment uninstall.");
         }
         tempRemoteDir.mkdirs();
         Utility util = new Utility();
@@ -97,7 +97,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
             CliDetails cliDetails = util.getCliDetails(run, listener, envVars, launcher);
             String buildTag = envVars.get("BUILD_TAG");
 
-            SolutionDeployActivateOptions options = new SolutionDeployActivateOptions();
+            SolutionDeployUninstallOptions options = new SolutionDeployUninstallOptions();
             if (cliDetails.getActualVersion().supportsNewTelemetry()) {
                 options.populateAdditionalTelemetryData();
                 options.setPipelineCorrelationId(buildTag);
@@ -115,7 +115,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
             options.setLanguage(localization);
 
             int exitCode = util.execute(
-                    "SolutionDeployActivateOptions",
+                    "SolutionDeployUninstallOptions",
                     options,
                     tempRemoteDir,
                     listener,
@@ -124,9 +124,9 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
                     true
             );
             if (exitCode != 0) {
-                throw new AbortException("UiPath CLI solution deploy-activate failed with exit code: " + exitCode);
+                throw new AbortException("UiPath CLI solution deploy-uninstall failed with exit code: " + exitCode);
             }
-            logger.println("Solution deployment activation completed successfully.");
+            logger.println("Solution deployment uninstall completed successfully.");
         } catch (URISyntaxException e) {
             e.printStackTrace(logger);
             throw new AbortException(e.getMessage());
@@ -134,7 +134,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
             try {
                 if (tempRemoteDir != null) tempRemoteDir.deleteRecursive();
             } catch (Exception e) {
-                logger.println("Failed to delete temp folder after solution deployment activation: " + e.getMessage());
+                logger.println("Failed to delete temp folder after solution deployment uninstall: " + e.getMessage());
                 e.printStackTrace(logger);
             }
         }
@@ -150,7 +150,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
         }
     }
 
-    @Symbol("UiPathSolutionDeployActivate")
+    @Symbol("UiPathSolutionUninstallDeployment")
     @Extension
     public static final class DescriptorImpl extends BuildStepDescriptor<Publisher> {
         @Override
@@ -160,7 +160,7 @@ public class UiPathSolutionDeployActivate extends Recorder implements SimpleBuil
 
         @Override
         public String getDisplayName() {
-            return "UiPath Solution: Deploy Activate";
+            return "UiPath Solution: Uninstall Deployment";
         }
 
         public FormValidation doCheckDeploymentName(@QueryParameter String value) {
