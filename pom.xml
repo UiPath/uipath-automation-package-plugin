@@ -21,7 +21,7 @@
         <envinject.version>2.4.0</envinject.version>
         <mockito-core.version>4.8.0</mockito-core.version>
         <plain-credentials.version>179.vc5cb_98f6db_38</plain-credentials.version>
-        <json.version>20231013</json.version>
+        <json.version>20260719</json.version>
         <credentials.version>1319.v7eb_51b_3a_c97b_</credentials.version>
         <org.jenkins-ci.plugins.junit.version>1304.vc85a_b_ca_96613</org.jenkins-ci.plugins.junit.version>
         <JUnitParams.version>1.1.1</JUnitParams.version>
